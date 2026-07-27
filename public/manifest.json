@@ -1,6 +1,6 @@
 {
-  "name": "My Finance - 个人财务管家",
-  "short_name": "My Finance",
+  "name": "米米账本 - 个人财务管家",
+  "short_name": "米米账本",
   "description": "简洁高效的个人财务管理工具，记账、预算、储蓄一目了然",
   "start_url": "/",
   "display": "standalone",

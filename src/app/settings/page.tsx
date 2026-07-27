@@ -83,7 +83,7 @@ export default function SettingsPage() {
 
       // 模板引擎生成报告
       const lines: string[] = [];
-      lines.push(`📊 My Finance 月度报告`);
+      lines.push(`📊 米米账本 月度报告`);
       lines.push(`生成时间：${new Date().toLocaleDateString('zh-CN')}`);
       lines.push(``);
       lines.push(`## 💰 资产概览`);

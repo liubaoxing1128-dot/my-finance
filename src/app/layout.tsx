@@ -26,12 +26,12 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: 'My Finance - 个人财务管理',
+  title: '米米账本 - 个人财务管理',
   description: '简洁、高效的个人财务管理工具',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
-    title: 'My Finance',
+    title: '米米账本',
     statusBarStyle: 'black-translucent',
   },
 };
