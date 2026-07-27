@@ -48,8 +48,7 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <head>
-        {/* PWA Service Worker — 暂时禁用，调试完成后再开 */}
-        {/* <Script id="sw-register" strategy="afterInteractive">
+        <Script id="sw-register" strategy="afterInteractive">
           {`
             if ('serviceWorker' in navigator) {
               window.addEventListener('load', () => {
@@ -57,7 +56,7 @@ export default function RootLayout({
               });
             }
           `}
-        </Script> */}
+        </Script>
       </head>
       <body className="min-h-full flex bg-muted/30">
         <ThemeProvider>
