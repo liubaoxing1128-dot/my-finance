@@ -1,0 +1,19 @@
+{
+  "name": "My Finance - 个人财务管家",
+  "short_name": "My Finance",
+  "description": "简洁高效的个人财务管理工具，记账、预算、储蓄一目了然",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#ffffff",
+  "theme_color": "#0f172a",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["finance", "productivity"]
+}

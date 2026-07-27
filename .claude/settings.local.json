@@ -1,0 +1,44 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls -la \"d:\\\\Claude code\\\\my-finance\\\\\")",
+      "Read(//d/Claude code/**)",
+      "Bash(mkdir -p \"d:/Claude code/my-finance/src/app/api/budget/[id]\")",
+      "Bash(mkdir -p \"d:/Claude code/my-finance/src/app/api/categories/[id]\")",
+      "Bash(taskkill //f //im node.exe)",
+      "Bash(npx next *)",
+      "Bash(sed -i 's/onValueChange={v => setForm\\({ \\\\.\\\\.\\\\.form, category_id: v }\\)}/onValueChange={v => setForm\\({ ...form, category_id: v ?? '\\\\'''\\\\'' }\\)}/g' src/app/transactions/page.tsx)",
+      "Bash(sed -i 's/onValueChange={v => setForm\\({ \\\\.\\\\.\\\\.form, account_id: v }\\)}/onValueChange={v => setForm\\({ ...form, account_id: v ?? '\\\\'''\\\\'' }\\)}/g' src/app/transactions/page.tsx)",
+      "Bash(sed -i 's/onValueChange={v => setForm\\({ \\\\.\\\\.\\\\.form, to_account_id: v }\\)}/onValueChange={v => setForm\\({ ...form, to_account_id: v ?? '\\\\'''\\\\'' }\\)}/g' src/app/transactions/page.tsx)",
+      "Bash(npm run *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000)",
+      "Bash(ipconfig)",
+      "Bash(netstat -ano)",
+      "Bash(taskkill //f //pid 27016)",
+      "Bash(mkdir -p \"d:/Claude code/my-finance/src/app/api/funds/[code]\")",
+      "Bash(curl -s \"http://localhost:3000/api/funds/search?keyword=000001\")",
+      "Bash(curl -s --max-time 5 \"https://fundsuggest.eastmoney.com/FundSearch/api/FundSearchAPI.ashx?m=1&key=000001\")",
+      "Bash(awk '{print $5}')",
+      "Bash(xargs -r -I{} taskkill //f //pid {})",
+      "Bash(curl -s \"http://localhost:3000/api/funds/refresh\")",
+      "Bash(curl -s --max-time 5 \"https://fundgz.1234567.com.cn/js/000001.js\" -H \"Referer: https://fund.eastmoney.com/\")",
+      "Bash(curl -s --max-time 5 \"https://api.fund.eastmoney.com/f10/lsjz?fundCode=000001&pageIndex=1&pageSize=1\" -H \"Referer: https://fund.eastmoney.com/\")",
+      "Bash(curl -s \"http://localhost:3000/api/funds\")",
+      "Bash(curl -s \"http://localhost:3000/api/funds/search?keyword=161725\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/funds)",
+      "Bash(curl -s http://localhost:3000/funds)",
+      "Bash(mkdir -p \"d:/Claude code/my-finance/src/app/api/sells/[id]\")",
+      "Bash(mkdir -p \"d:/Claude code/my-finance/src/app/api/auto-invest/[id]\")",
+      "Bash(curl -s http://localhost:3000/api/auto-invest)",
+      "Bash(curl -s http://localhost:3000/api/accounts)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/settings)",
+      "Bash(git init *)",
+      "Bash(git add *)"
+    ],
+    "additionalDirectories": [
+      "d:\\Claude code\\my-finance\\src\\app\\api\\budget",
+      "d:\\Claude code\\my-finance\\src\\app\\api\\categories",
+      "d:\\Claude code\\my-finance\\src\\app\\api\\funds"
+    ]
+  }
+}
