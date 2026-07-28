@@ -5,7 +5,9 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { Download, Upload, FileText, Shield, Trash2 } from 'lucide-react';
+import { Download, Upload, FileText, Shield } from 'lucide-react';
+import { exportAllData, importAllData } from '@/lib/db-ops';
+import { getDashboard, getMonthlyTrends, getCategorySpendings, getAllFunds } from '@/lib/db-ops';
 
 const fmt = (v: number) => `¥${v.toLocaleString('zh-CN', { minimumFractionDigits: 2 })}`;
 
@@ -15,17 +17,14 @@ export default function SettingsPage() {
   const [reportLoading, setReportLoading] = useState(false);
 
   // === 备份 ===
-  const handleBackup = async () => {
+  const handleBackup = () => {
     try {
-      const res = await fetch('/api/backup');
-      const data = await res.json();
-      if (!data.success) { toast.error(data.error); return; }
-
-      const blob = new Blob([JSON.stringify(data.data, null, 2)], { type: 'application/json' });
+      const data = exportAllData();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `my-finance-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      a.download = `mimi-finance-backup-${new Date().toISOString().slice(0, 10)}.json`;
       a.click();
       URL.revokeObjectURL(url);
       toast.success('备份文件已下载');
@@ -46,40 +45,36 @@ export default function SettingsPage() {
 
         if (!confirm('恢复数据将覆盖当前所有数据，确定继续？')) return;
 
-        const res = await fetch('/api/backup', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data),
-        });
-        const result = await res.json();
-        if (result.success) {
-          toast.success(`已恢复 ${result.data.imported} 条记录，请刷新页面`);
-        } else {
-          toast.error(result.error);
-        }
+        importAllData(data);
+        toast.success('数据已恢复，请刷新页面');
       } catch { toast.error('无效的备份文件'); }
     };
     input.click();
   };
 
   // === 月度报告 ===
-  const handleReport = async () => {
+  const handleReport = () => {
     setReportLoading(true);
     try {
-      const res = await fetch('/api/dashboard');
-      const dash = await res.json();
-      if (!dash.success) { toast.error('获取数据失败'); setReportLoading(false); return; }
+      const d = getDashboard() as any;
+      const trends = getMonthlyTrends() as any[];
+      const spendings = getCategorySpendings() as any[];
+      const rawFunds = getAllFunds() as any[];
 
-      const d = dash.data;
-      const res2 = await fetch('/api/dashboard?type=trends');
-      const trends = await res2.json();
-      const res3 = await fetch('/api/dashboard?type=spendings');
-      const spendings = await res3.json();
-      const res4 = await fetch('/api/funds');
-      const funds = await res4.json();
+      const topCategory = spendings.slice(0, 3);
 
-      const topCategory = (spendings.data || []).slice(0, 3);
-      const fundData = funds.success ? funds.data.summary : null;
+      // 计算基金汇总
+      let totalInv = 0, totalMv = 0;
+      for (const f of rawFunds) {
+        totalInv += f.total_invested || 0;
+        if (f.current_nav) totalMv += (f.total_shares || 0) * f.current_nav;
+      }
+      const fundData = rawFunds.length > 0 ? {
+        total_invested: totalInv,
+        total_market_value: totalMv,
+        total_profit: totalMv - totalInv,
+        total_profit_rate: totalInv > 0 ? ((totalMv - totalInv) / totalInv * 100) : 0,
+      } : null;
 
       // 模板引擎生成报告
       const lines: string[] = [];

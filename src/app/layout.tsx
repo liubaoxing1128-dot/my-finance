@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import { Sidebar } from '@/components/layout/sidebar';
 import { ThemeProvider } from '@/components/theme-provider';
+import { InitDbProvider } from '@/components/init-db';
 import { Toaster } from '@/components/ui/sonner';
 import Script from 'next/script';
 import './globals.css';
@@ -60,6 +61,7 @@ export default function RootLayout({
       </head>
       <body className="min-h-full flex bg-muted/30">
         <ThemeProvider>
+          <InitDbProvider>
           <Sidebar />
           <main
             className="flex-1 overflow-auto pb-safe lg:pt-0"
@@ -70,6 +72,7 @@ export default function RootLayout({
             </div>
           </main>
           <Toaster position="bottom-center" richColors />
+          </InitDbProvider>
         </ThemeProvider>
       </body>
     </html>

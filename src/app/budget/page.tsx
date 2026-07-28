@@ -13,6 +13,7 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { Plus, Trash2, ChartNoAxesGantt } from 'lucide-react';
 import type { BudgetWithCategory } from '@/types';
+import { getBudgets, setBudget, deleteBudget } from '@/lib/db-ops';
 
 const formatMoney = (v: number) => `¥${v.toLocaleString('zh-CN', { minimumFractionDigits: 2 })}`;
 
@@ -27,11 +28,9 @@ export default function BudgetPage() {
 
   useEffect(() => { refreshAll(); }, []);
 
-  const fetchBudgets = async (m: string) => {
+  const fetchBudgets = (m: string) => {
     try {
-      const res = await fetch(`/api/budget?month=${m}`);
-      const data = await res.json();
-      setBudgets(data.data || []);
+      setBudgets(getBudgets(m) as unknown as BudgetWithCategory[]);
     } catch {}
   };
 
@@ -39,30 +38,22 @@ export default function BudgetPage() {
 
   const expenseCats = categories.filter(c => c.type === 'expense');
 
-  const handleSetBudget = async () => {
+  const handleSetBudget = () => {
     if (!form.category_id || !form.amount) { toast.error('请选择分类和预算金额'); return; }
     setSaving(true);
     try {
-      const res = await fetch('/api/budget', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ category_id: Number(form.category_id), amount: Number(form.amount), month }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        toast.success('预算已设定');
-        setOpen(false); setForm({ category_id: '', amount: '' });
-        fetchBudgets(month);
-      } else { toast.error(data.error); }
+      setBudget({ category_id: Number(form.category_id), amount: Number(form.amount), month });
+      toast.success('预算已设定');
+      setOpen(false); setForm({ category_id: '', amount: '' });
+      fetchBudgets(month);
     } catch { toast.error('操作失败'); }
     finally { setSaving(false); }
   };
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = (id: number) => {
     if (!confirm('确定要删除这个预算吗？')) return;
-    const res = await fetch(`/api/budget/${id}`, { method: 'DELETE' });
-    const data = await res.json();
-    if (data.success) { toast.success('预算已删除'); fetchBudgets(month); }
-    else { toast.error(data.error); }
+    deleteBudget(id);
+    toast.success('预算已删除'); fetchBudgets(month);
   };
 
   const totalBudget = budgets.reduce((s, b) => s + b.amount, 0);

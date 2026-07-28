@@ -18,6 +18,14 @@ import type {
   AutoInvestWithFund, InvestFrequency,
 } from '@/types';
 import { FundTypeLabels, InvestFrequencyLabels } from '@/types';
+import {
+  getAllFunds, addFund as dbAddFund, deleteFund as dbDeleteFund,
+  createFundHolding, deleteFundHolding, getFundHoldings, sellFund as dbSellFund,
+  getAutoInvests, createAutoInvest as dbCreateAutoInvest,
+  executeAutoInvest as dbExecInvest, deleteAutoInvest as dbDeletePlan,
+  refreshFundNavs, searchFunds, updateFundNav,
+  getAccounts,
+} from '@/lib/db-ops';
 
 const fmt = (v: number) => `¥${v.toLocaleString('zh-CN', { minimumFractionDigits: 2 })}`;
 const pct = (v: number) => (v >= 0 ? '+' : '') + v.toFixed(2) + '%';
@@ -55,18 +63,46 @@ export default function FundsPage() {
   const [investOpen, setInvestOpen] = useState(false);
   const [investForm, setInvestForm] = useState({ fund_code: '', amount: '', frequency: 'monthly' as InvestFrequency, account_id: '', next_date: new Date().toISOString().slice(0, 10) });
 
-  const fetchAll = useCallback(async () => {
+  const fetchAll = useCallback(() => {
     setLoading(true);
     try {
-      const [fr, pr, ar] = await Promise.all([
-        fetch('/api/funds').then(r => r.json()),
-        fetch('/api/auto-invest').then(r => r.json()),
-        fetch('/api/accounts').then(r => r.json()),
-      ]);
-      if (fr.success) { setFunds(fr.data.funds); setSummary(fr.data.summary); }
-      if (pr.success) setPlans(pr.data || []);
-      if (ar.success) setAccounts(ar.data || []);
-    } catch {}
+      const rawFunds = getAllFunds() as any[];
+      const accts = getAccounts() as any[];
+      const autoPlans = getAutoInvests() as unknown as AutoInvestWithFund[];
+      setAccounts(accts);
+
+      const enriched = rawFunds.map(f => {
+        const invested = f.total_invested;
+        const shares = f.total_shares;
+        const mv = f.current_nav ? shares * f.current_nav : null;
+        const profit = mv !== null ? mv - invested : null;
+        const profitRate = profit !== null && invested > 0 ? (profit / invested) * 100 : null;
+        return { ...f, shares, invested, market_value: mv, profit, profit_rate: profitRate, holdings: [] as FundHoldingWithFund[] };
+      });
+
+      // 加载持仓
+      const allHoldings = getFundHoldings() as unknown as FundHoldingWithFund[];
+      const grouped: Record<string, FundHoldingWithFund[]> = {};
+      for (const h of allHoldings) {
+        if (!grouped[h.fund_code]) grouped[h.fund_code] = [];
+        grouped[h.fund_code].push(h);
+      }
+      for (const f of enriched) f.holdings = grouped[f.code] || [];
+
+      setFunds(enriched);
+      setPlans(autoPlans);
+
+      const s: FundSummary = {
+        total_invested: 0, total_market_value: 0, total_profit: 0, total_profit_rate: 0, fund_count: enriched.length,
+      };
+      for (const f of enriched) {
+        s.total_invested += f.invested;
+        if (f.market_value) s.total_market_value += f.market_value;
+      }
+      s.total_profit = s.total_market_value - s.total_invested;
+      s.total_profit_rate = s.total_invested > 0 ? (s.total_profit / s.total_invested) * 100 : 0;
+      setSummary(s);
+    } catch (e) { console.error(e); }
     setLoading(false);
   }, []);
 
@@ -77,26 +113,19 @@ export default function FundsPage() {
     if (!searchKw.trim()) return;
     setSearching(true);
     try {
-      const res = await fetch(`/api/funds/search?keyword=${encodeURIComponent(searchKw.trim())}`);
-      const data = await res.json();
+      const data = await searchFunds(searchKw.trim());
       setSearchResults(data.data || []);
     } catch { toast.error('搜索失败'); }
     setSearching(false);
   };
 
-  const addFund = async (item: FundSearchResult) => {
+  const addFund = (item: FundSearchResult) => {
     try {
       const settlement = item.type === 'qdi' ? 2 : 1;
-      const res = await fetch('/api/funds', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code: item.code, name: item.name, type: item.type, settlement }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        toast.success(`已添加 ${item.name}`);
-        setSearchResults(prev => prev.filter(r => r.code !== item.code));
-        fetchAll();
-      } else { toast.error(data.error); }
+      dbAddFund(item.code, item.name, item.type, settlement);
+      toast.success(`已添加 ${item.name}`);
+      setSearchResults(prev => prev.filter(r => r.code !== item.code));
+      fetchAll();
     } catch { toast.error('添加失败'); }
   };
 
@@ -111,34 +140,25 @@ export default function FundsPage() {
     if (!buyFund || !buyForm.amount) { toast.error('请输入金额'); return; }
     let nav: number | null = null;
 
-    try { const r = await fetch('/api/funds/refresh'); await r.json(); } catch {}
+    try { await refreshFundNavs(); } catch {}
     try {
-      const fres = await fetch('/api/funds'); const fdata = await fres.json();
-      if (fdata.success) {
-        const f = fdata.data.funds.find((ff: FundCard) => ff.code === buyFund.code);
-        nav = f?.current_nav || null;
-      }
+      const rawFunds = getAllFunds() as any[];
+      const f = rawFunds.find((ff: any) => ff.code === buyFund.code);
+      nav = f?.current_nav || null;
     } catch {}
 
     if (!nav) { toast.error('无法获取最新净值，请先刷新'); return; }
 
-    // 构建交易时间
     const timeStr = buyForm.timeOfDay === 'before' ? '14:30:00' : '16:00:00';
     const tradeTime = buyForm.date + 'T' + timeStr;
 
     try {
-      const res = await fetch('/api/holdings', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fund_code: buyFund.code, amount: Number(buyForm.amount), nav_at_purchase: nav,
-          date: buyForm.date, fee: Number(buyForm.fee) || 0, trade_time: tradeTime,
-        }),
+      const result = createFundHolding({
+        fund_code: buyFund.code, amount: Number(buyForm.amount), nav_at_purchase: nav,
+        date: buyForm.date, fee: Number(buyForm.fee) || 0, trade_time: tradeTime,
       });
-      const data = await res.json();
-      if (data.success) {
-        toast.success(`买入成功，净值确认日期：${data.data.settlement_date}`);
-        setBuyOpen(false); fetchAll();
-      } else { toast.error(data.error); }
+      toast.success(`买入成功，净值确认日期：${result.settlement_date}`);
+      setBuyOpen(false); fetchAll();
     } catch { toast.error('买入失败'); }
   };
 
@@ -152,30 +172,22 @@ export default function FundsPage() {
   const handleSell = async () => {
     if (!sellFund || !sellForm.shares) { toast.error('请输入卖出份额'); return; }
     let nav: number | null = null;
-    try { const r = await fetch('/api/funds/refresh'); await r.json(); } catch {}
+    try { await refreshFundNavs(); } catch {}
     try {
-      const fres = await fetch('/api/funds'); const fdata = await fres.json();
-      if (fdata.success) {
-        const f = fdata.data.funds.find((ff: FundCard) => ff.code === sellFund.code);
-        nav = f?.current_nav || null;
-      }
+      const rawFunds = getAllFunds() as any[];
+      const f = rawFunds.find((ff: any) => ff.code === sellFund.code);
+      nav = f?.current_nav || null;
     } catch {}
     if (!nav) { toast.error('无法获取最新净值，请先刷新'); return; }
 
     try {
-      const res = await fetch('/api/sells', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fund_code: sellFund.code, shares: Number(sellForm.shares), nav_at_sell: nav,
-          date: sellForm.date, fee: Number(sellForm.fee) || 0,
-        }),
+      dbSellFund({
+        fund_code: sellFund.code, shares: Number(sellForm.shares), nav_at_sell: nav,
+        date: sellForm.date, fee: Number(sellForm.fee) || 0,
       });
-      const data = await res.json();
-      if (data.success) {
-        toast.success(`卖出成功，到账 ${fmt(Number(sellForm.shares) * nav - Number(sellForm.fee || 0))}`);
-        setSellOpen(false); fetchAll();
-      } else { toast.error(data.error); }
-    } catch { toast.error('卖出失败'); }
+      toast.success(`卖出成功，到账 ${fmt(Number(sellForm.shares) * nav - Number(sellForm.fee || 0))}`);
+      setSellOpen(false); fetchAll();
+    } catch (e: any) { toast.error(e.message || '卖出失败'); }
   };
 
   // === 定投 ===
@@ -192,51 +204,44 @@ export default function FundsPage() {
       toast.error('请填写完整信息'); return;
     }
     try {
-      const res = await fetch('/api/auto-invest', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(investForm),
-      });
-      const data = await res.json();
-      if (data.success) { toast.success('定投计划已创建'); setInvestOpen(false); fetchAll(); }
-      else { toast.error(data.error); }
+      dbCreateAutoInvest(investForm);
+      toast.success('定投计划已创建'); setInvestOpen(false); fetchAll();
     } catch { toast.error('创建失败'); }
   };
 
-  const execInvest = async (id: number) => {
+  const execInvest = (id: number) => {
     if (!confirm('确定执行本期定投吗？将从关联账户扣款。')) return;
-    const res = await fetch(`/api/auto-invest/${id}`, { method: 'POST' });
-    const data = await res.json();
-    if (data.success) {
-      toast.success(`定投执行成功 · 剩余账户余额 ${fmt(data.data.account_balance)}`);
+    try {
+      const data = dbExecInvest(id);
+      toast.success(`定投执行成功`);
       fetchAll();
-    } else { toast.error(data.error); }
+    } catch (e: any) { toast.error(e.message || '执行失败'); }
   };
 
-  const deletePlan = async (id: number) => {
+  const deletePlan = (id: number) => {
     if (!confirm('确定删除这个定投计划吗？')) return;
-    await fetch(`/api/auto-invest/${id}`, { method: 'DELETE' });
+    dbDeletePlan(id);
     toast.success('已删除'); fetchAll();
   };
 
   const refreshAllNav = async () => {
     setRefreshing(true);
     try {
-      const res = await fetch('/api/funds/refresh');
-      const data = await res.json();
+      const data = await refreshFundNavs();
       if (data.success) { toast.success(`已更新 ${data.data.updated} 只基金净值`); fetchAll(); }
     } catch { toast.error('刷新失败'); }
     setRefreshing(false);
   };
 
-  const deleteHolding = async (id: number) => {
+  const deleteHolding = (id: number) => {
     if (!confirm('确定删除这条买入记录吗？')) return;
-    await fetch(`/api/holdings/${id}`, { method: 'DELETE' });
+    deleteFundHolding(id);
     toast.success('已删除'); fetchAll();
   };
 
-  const deleteFund = async (code: string) => {
+  const deleteFund = (code: string) => {
     if (!confirm('确定删除这只基金吗？')) return;
-    await fetch(`/api/funds/${code}`, { method: 'DELETE' });
+    dbDeleteFund(code);
     toast.success('已删除'); fetchAll();
   };
 
