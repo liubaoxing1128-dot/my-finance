@@ -309,8 +309,26 @@ export function searchFunds(keyword: string) {
 }
 export function updateFundNav(code: string, nav: number, navDate: string) {
   const db = getClientDb();
-  run("UPDATE funds SET current_nav=?,nav_date=?,updated_at=datetime('now','localtime') WHERE code=?", [nav, navDate, code]);
+  const result = db.run("UPDATE funds SET current_nav=?,nav_date=?,updated_at=datetime('now','localtime') WHERE code=?", [nav, navDate, code]);
+  console.log(`[DB] updateFundNav ${code} nav=${nav} date=${navDate}`);
   markDirty();
+  // 强制立即保存
+  saveNow();
+}
+
+// 强制保存（不等防抖）
+async function saveNow() {
+  try {
+    const db = getClientDb();
+    const root = await navigator.storage.getDirectory();
+    const handle = await root.getFileHandle('mimi-finance.db', { create: true });
+    const writable = await handle.createWritable();
+    await writable.write(new Uint8Array(db.export()));
+    await writable.close();
+    console.log('[DB] OPFS 保存成功');
+  } catch (e) {
+    console.error('[DB] OPFS 保存失败:', e);
+  }
 }
 export function getFundHoldings(fundCode?: string) {
   let sql = `

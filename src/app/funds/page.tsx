@@ -63,24 +63,45 @@ export default function FundsPage() {
   const [investOpen, setInvestOpen] = useState(false);
   const [investForm, setInvestForm] = useState({ fund_code: '', amount: '', frequency: 'monthly' as InvestFrequency, account_id: '', next_date: new Date().toISOString().slice(0, 10) });
 
-  const fetchAll = useCallback(() => {
+  const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
+      // 基金列表、持仓、定投：从客户端 DB 读取
       const rawFunds = getAllFunds() as any[];
       const accts = getAccounts() as any[];
       const autoPlans = getAutoInvests() as unknown as AutoInvestWithFund[];
       setAccounts(accts);
+      setPlans(autoPlans);
 
-      const enriched = rawFunds.map(f => {
+      // 如果有基金，从服务端拉最新净值（带缓存兜底）
+      const codes = rawFunds.map((f: any) => f.code).join(',');
+      let serverFundsMap: Record<string, any> = {};
+      if (codes) {
+        try {
+          const resp = await fetch(`/api/funds/refresh?codes=${encodeURIComponent(codes)}`);
+          const d = await resp.json();
+          if (d.success && d.data.results) {
+            for (const item of d.data.results) {
+              serverFundsMap[item.code] = item;
+              // 同步最新净值到客户端 DB
+              updateFundNav(item.code, item.nav, item.date);
+            }
+          }
+        } catch {}
+      }
+
+      const enriched = rawFunds.map((f: any) => {
+        // 优先用服务端刚拉的最新净值，其次已缓存的
+        const latestNav = serverFundsMap[f.code]?.nav ?? f.current_nav;
         const invested = f.total_invested;
         const shares = f.total_shares;
-        const mv = f.current_nav ? shares * f.current_nav : null;
+        const mv = latestNav ? shares * latestNav : null;
         const profit = mv !== null ? mv - invested : null;
         const profitRate = profit !== null && invested > 0 ? (profit / invested) * 100 : null;
-        return { ...f, shares, invested, market_value: mv, profit, profit_rate: profitRate, holdings: [] as FundHoldingWithFund[] };
+        return { ...f, current_nav: latestNav ?? f.current_nav, shares, invested, market_value: mv, profit, profit_rate: profitRate, holdings: [] as FundHoldingWithFund[] };
       });
 
-      // 加载持仓
+      // 加载持仓（从客户端 DB）
       const allHoldings = getFundHoldings() as unknown as FundHoldingWithFund[];
       const grouped: Record<string, FundHoldingWithFund[]> = {};
       for (const h of allHoldings) {
@@ -90,7 +111,6 @@ export default function FundsPage() {
       for (const f of enriched) f.holdings = grouped[f.code] || [];
 
       setFunds(enriched);
-      setPlans(autoPlans);
 
       const s: FundSummary = {
         total_invested: 0, total_market_value: 0, total_profit: 0, total_profit_rate: 0, fund_count: enriched.length,
