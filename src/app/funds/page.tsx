@@ -140,14 +140,18 @@ export default function FundsPage() {
     if (!buyFund || !buyForm.amount) { toast.error('请输入金额'); return; }
     let nav: number | null = null;
 
-    try { await refreshFundNavs(); } catch {}
+    // 直接从天天基金 API 拉这只基金的最新净值（通过服务端代理）
     try {
-      const rawFunds = getAllFunds() as any[];
-      const f = rawFunds.find((ff: any) => ff.code === buyFund.code);
-      nav = f?.current_nav || null;
+      const res = await fetch(`/api/funds/refresh?codes=${encodeURIComponent(buyFund.code)}`);
+      const result = await res.json();
+      if (result.success && result.data.results?.length > 0) {
+        nav = result.data.results[0].nav;
+        // 同步到客户端 DB
+        updateFundNav(buyFund.code, nav!, result.data.results[0].date);
+      }
     } catch {}
 
-    if (!nav) { toast.error('无法获取最新净值，请先刷新'); return; }
+    if (!nav) { toast.error('无法获取最新净值，请确认网络连接后重试'); return; }
 
     const timeStr = buyForm.timeOfDay === 'before' ? '14:30:00' : '16:00:00';
     const tradeTime = buyForm.date + 'T' + timeStr;
@@ -157,7 +161,7 @@ export default function FundsPage() {
         fund_code: buyFund.code, amount: Number(buyForm.amount), nav_at_purchase: nav,
         date: buyForm.date, fee: Number(buyForm.fee) || 0, trade_time: tradeTime,
       });
-      toast.success(`买入成功，净值确认日期：${result.settlement_date}`);
+      toast.success(`买入成功 · 净值${nav.toFixed(4)} · 确认日${result.settlement_date}`);
       setBuyOpen(false); fetchAll();
     } catch { toast.error('买入失败'); }
   };
@@ -172,17 +176,19 @@ export default function FundsPage() {
   const handleSell = async () => {
     if (!sellFund || !sellForm.shares) { toast.error('请输入卖出份额'); return; }
     let nav: number | null = null;
-    try { await refreshFundNavs(); } catch {}
     try {
-      const rawFunds = getAllFunds() as any[];
-      const f = rawFunds.find((ff: any) => ff.code === sellFund.code);
-      nav = f?.current_nav || null;
+      const res = await fetch(`/api/funds/refresh?codes=${encodeURIComponent(sellFund.code)}`);
+      const result = await res.json();
+      if (result.success && result.data.results?.length > 0) {
+        nav = result.data.results[0].nav;
+        updateFundNav(sellFund.code, nav!, result.data.results[0].date);
+      }
     } catch {}
-    if (!nav) { toast.error('无法获取最新净值，请先刷新'); return; }
+    if (!nav) { toast.error('无法获取最新净值，请确认网络连接后重试'); return; }
 
     try {
       dbSellFund({
-        fund_code: sellFund.code, shares: Number(sellForm.shares), nav_at_sell: nav,
+        fund_code: sellFund.code, shares: Number(sellForm.shares), nav_at_sell: nav!,
         date: sellForm.date, fee: Number(sellForm.fee) || 0,
       });
       toast.success(`卖出成功，到账 ${fmt(Number(sellForm.shares) * nav - Number(sellForm.fee || 0))}`);
