@@ -14,34 +14,84 @@ async function getOpfsHandle(): Promise<FileSystemFileHandle> {
   return root.getFileHandle(DB_NAME, { create: true });
 }
 
-// 从 OPFS 读取数据库
-async function loadFromOpfs(): Promise<Uint8Array | null> {
+// ====== IndexedDB fallback（Android WebView 兼容）======
+const IDB_NAME = 'mimi-finance-storage';
+const IDB_KEY = 'database';
+
+function openIdb(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(IDB_NAME, 1);
+    req.onupgradeneeded = () => { req.result.createObjectStore('store'); };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function loadFromIdb(): Promise<Uint8Array | null> {
   try {
-    const handle = await getOpfsHandle();
+    const idb = await openIdb();
+    return new Promise((resolve) => {
+      const tx = idb.transaction('store', 'readonly');
+      const req = tx.objectStore('store').get(IDB_KEY);
+      req.onsuccess = () => resolve(req.result ? new Uint8Array(req.result) : null);
+      req.onerror = () => resolve(null);
+    });
+  } catch { return null; }
+}
+
+async function saveToIdb(data: Uint8Array) {
+  try {
+    const idb = await openIdb();
+    const tx = idb.transaction('store', 'readwrite');
+    tx.objectStore('store').put(data, IDB_KEY);
+  } catch (e) {
+    console.error('IndexedDB 保存失败:', e);
+  }
+}
+
+// ====== OPFS 存储（仅浏览器端可用）======
+const isBrowser = typeof window !== 'undefined';
+
+async function loadFromOpfs(): Promise<Uint8Array | null> {
+  if (!isBrowser) return null;
+  try {
+    const root = await navigator.storage.getDirectory();
+    const handle = await root.getFileHandle(DB_NAME, { create: true });
     const file = await handle.getFile();
-    if (file.size > 0) {
-      return new Uint8Array(await file.arrayBuffer());
-    }
+    if (file.size > 0) return new Uint8Array(await file.arrayBuffer());
   } catch {}
   return null;
 }
 
-// 保存到 OPFS
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 async function saveToOpfs() {
-  if (!db) return;
-  // 防抖：500ms 内的多次写入合并为一次保存
+  if (!db || !isBrowser) return;
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = setTimeout(async () => {
     try {
-      const handle = await getOpfsHandle();
+      const root = await navigator.storage.getDirectory();
+      const handle = await root.getFileHandle(DB_NAME, { create: true });
       const writable = await handle.createWritable();
       await writable.write(new Uint8Array(db!.export()));
       await writable.close();
-    } catch (e) {
-      console.error('OPFS 保存失败:', e);
-    }
+    } catch (e) { console.error('OPFS 保存失败:', e); }
   }, 500);
+}
+
+// ====== 统一持久化层 ======
+async function loadDatabase(): Promise<Uint8Array | null> {
+  // 先试 OPFS，再试 IndexedDB
+  const opfs = await loadFromOpfs();
+  if (opfs) return opfs;
+  return loadFromIdb();
+}
+
+async function saveDatabase() {
+  if (!db) return;
+  const data = new Uint8Array(db.export());
+  // 双写：OPFS + IndexedDB（选能用的）
+  try { await saveToOpfs(); } catch {}
+  try { await saveToIdb(data); } catch {}
 }
 
 // 初始化数据库
@@ -52,16 +102,22 @@ export async function initClientDb(): Promise<Database> {
     locateFile: () => '/sql-wasm.wasm',
   });
 
-  // 尝试从 OPFS 加载已有数据库
-  const saved = await loadFromOpfs();
-  if (saved) {
-    db = new SQL.Database(saved);
-  } else {
-    db = new SQL.Database();
-    initSchema(db);
-    seedIfEmpty(db);
-    await saveToOpfs();
+  // 尝试从持久化存储加载已有数据库
+  const saved = await loadDatabase();
+  if (saved && saved.length > 0) {
+    try {
+      db = new SQL.Database(saved);
+      return db;
+    } catch {
+      // 数据损坏，重新创建
+    }
   }
+
+  // 新建数据库
+  db = new SQL.Database();
+  initSchema(db);
+  seedIfEmpty(db);
+  await saveDatabase();
 
   return db;
 }
@@ -73,7 +129,7 @@ export function getClientDb(): Database {
 
 // 自动保存（每次写操作后调用）
 export function markDirty() {
-  saveToOpfs();
+  saveDatabase();
 }
 
 // ========== Schema（与服务端完全一致）==========
