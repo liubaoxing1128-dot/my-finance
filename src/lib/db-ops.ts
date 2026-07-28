@@ -289,19 +289,17 @@ export function deleteFund(code: string) {
   markDirty();
 }
 export async function refreshFundNavs() {
-  // 调服务端 API 拿净值，然后同步到客户端 DB
-  const r = await fetch('/api/funds/refresh');
+  // 从客户端 DB 获取所有基金代码，传服务端批量刷新
+  const localFunds = getAllFunds() as any[];
+  const codes = localFunds.map((f: any) => f.code).join(',');
+  if (!codes) return { success: true, data: { updated: 0 } };
+
+  const r = await fetch(`/api/funds/refresh?codes=${encodeURIComponent(codes)}`);
   const data = await r.json();
-  if (data.success) {
-    // 从服务端拉基金列表（含最新净值），同步到客户端 DB
-    const fundsRes = await fetch('/api/funds');
-    const fundsData = await fundsRes.json();
-    if (fundsData.success && fundsData.data.funds) {
-      for (const f of fundsData.data.funds) {
-        if (f.current_nav != null) {
-          updateFundNav(f.code, f.current_nav, f.nav_date);
-        }
-      }
+  if (data.success && data.data.results) {
+    // 直接把服务端返回的净值写入客户端 DB
+    for (const item of data.data.results) {
+      updateFundNav(item.code, item.nav, item.date);
     }
   }
   return data;
