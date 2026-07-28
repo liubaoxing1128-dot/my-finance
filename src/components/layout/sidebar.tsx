@@ -17,7 +17,7 @@ const navItems = [
   { href: '/', label: '仪表盘', icon: LayoutDashboard },
   { href: '/accounts', label: '账户管理', icon: Wallet },
   { href: '/transactions', label: '交易记录', icon: ArrowLeftRight },
-  { href: '/funds', label: '基金持仓', icon: ChartLine },
+  // { href: '/funds', label: '基金持仓', icon: ChartLine },  // 暂时隐藏，代码保留
   { href: '/categories', label: '分类管理', icon: Tags },
   { href: '/savings', label: '储蓄目标', icon: PiggyBank },
   { href: '/budget', label: '预算管理', icon: ChartNoAxesGantt },
