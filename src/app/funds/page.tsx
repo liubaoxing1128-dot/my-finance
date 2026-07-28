@@ -146,7 +146,7 @@ export default function FundsPage() {
       toast.success(`已添加 ${item.name}`);
       setSearchResults(prev => prev.filter(r => r.code !== item.code));
       fetchAll();
-    } catch { toast.error('添加失败'); }
+    } catch (e: any) { toast.error(e?.message || "添加失败"); }
   };
 
   // === 买入 ===
@@ -232,7 +232,7 @@ export default function FundsPage() {
     try {
       dbCreateAutoInvest(investForm);
       toast.success('定投计划已创建'); setInvestOpen(false); fetchAll();
-    } catch { toast.error('创建失败'); }
+    } catch (e: any) { toast.error(e?.message || "创建失败"); }
   };
 
   const execInvest = (id: number) => {

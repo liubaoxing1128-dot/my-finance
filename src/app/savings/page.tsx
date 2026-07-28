@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { Plus, PiggyBank, Trash2, Pencil, Goal } from 'lucide-react';
 import type { SavingsGoal } from '@/types';
+import { createSavingsGoal, updateSavingsGoal, deleteSavingsGoal, depositSavings } from '@/lib/db-ops';
 
 const colors = ['#10b981', '#8b5cf6', '#3b82f6', '#f43f5e', '#f97316', '#06b6d4', '#ec4899'];
 
@@ -50,52 +51,41 @@ export default function SavingsPage() {
     setOpen(true);
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = () => {
     if (!form.name || !form.target_amount) { toast.error('请填写目标名称和金额'); return; }
     setSaving(true);
     try {
-      const body = {
-        name: form.name, target_amount: Number(form.target_amount),
-        deadline: form.deadline || null, color: form.color,
-      };
-      const url = editGoal ? `/api/savings/${editGoal.id}` : '/api/savings';
-      const method = editGoal ? 'PUT' : 'POST';
-      const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-      const data = await res.json();
-      if (data.success) {
-        toast.success(editGoal ? '目标已更新' : '储蓄目标已创建');
-        setOpen(false); setEditGoal(null); setForm(emptyForm);
-        refreshAll();
-      } else { toast.error(data.error); }
-    } catch { toast.error('操作失败'); }
+      const body = { name: form.name, target_amount: Number(form.target_amount), deadline: form.deadline || null, color: form.color };
+      if (editGoal) {
+        updateSavingsGoal(editGoal.id, body);
+      } else {
+        createSavingsGoal(body);
+      }
+      toast.success(editGoal ? '目标已更新' : '储蓄目标已创建');
+      setOpen(false); setEditGoal(null); setForm(emptyForm);
+      refreshAll();
+    } catch (e: any) { toast.error(e?.message || '操作失败'); }
     finally { setSaving(false); }
   };
 
-  const handleDeposit = async () => {
+  const handleDeposit = () => {
     if (!depositAmount || Number(depositAmount) <= 0 || !depositGoal) return;
     setSaving(true);
     try {
-      const res = await fetch(`/api/savings/${depositGoal.id}/deposit`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount: Number(depositAmount), date: new Date().toISOString().slice(0, 10) }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        toast.success(`已存入 ${formatMoney(Number(depositAmount))}`);
-        if (data.data.goal.status === 'completed') toast.success('🎉 目标达成！');
-        setDepositOpen(false); setDepositAmount(''); setDepositGoal(null);
-        refreshAll();
-      } else { toast.error(data.error); }
-    } catch { toast.error('操作失败'); }
+      depositSavings(depositGoal.id, Number(depositAmount), new Date().toISOString().slice(0, 10));
+      toast.success(`已存入 ${formatMoney(Number(depositAmount))}`);
+      setDepositOpen(false); setDepositAmount(''); setDepositGoal(null);
+      refreshAll();
+    } catch (e: any) { toast.error(e?.message || '操作失败'); }
     finally { setSaving(false); }
   };
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = (id: number) => {
     if (!confirm('确定要删除这个储蓄目标吗？')) return;
-    const res = await fetch(`/api/savings/${id}`, { method: 'DELETE' });
-    const data = await res.json();
-    if (data.success) { toast.success('已删除'); refreshAll(); }
-    else { toast.error(data.error); }
+    try {
+      deleteSavingsGoal(id);
+      toast.success('已删除'); refreshAll();
+    } catch (e: any) { toast.error(e?.message || '操作失败'); }
   };
 
   const totalTarget = savingsGoals.filter(g => g.status === 'active').reduce((s, g) => s + g.target_amount, 0);

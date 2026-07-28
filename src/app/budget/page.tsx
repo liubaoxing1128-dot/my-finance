@@ -46,7 +46,7 @@ export default function BudgetPage() {
       toast.success('预算已设定');
       setOpen(false); setForm({ category_id: '', amount: '' });
       fetchBudgets(month);
-    } catch { toast.error('操作失败'); }
+    } catch (e: any) { toast.error(e?.message || "操作失败"); }
     finally { setSaving(false); }
   };
 

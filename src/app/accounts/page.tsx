@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { Plus, Pencil, Trash2, Landmark, Smartphone, MessageCircle, Banknote, Wallet } from 'lucide-react';
 import type { Account, AccountType } from '@/types';
+import { createAccount, updateAccount, deleteAccount } from '@/lib/db-ops';
 
 const accountTypeConfig: Record<AccountType, { label: string; icon: React.ReactNode }> = {
   bank: { label: '银行账户', icon: <Landmark className="w-4 h-4" /> },
@@ -34,32 +35,29 @@ export default function AccountsPage() {
 
   useEffect(() => { refreshAll(); }, []);
 
-  const handleSubmit = async () => {
+  const handleSubmit = () => {
     if (!form.name) { toast.error('请输入账户名称'); return; }
     setSaving(true);
     try {
-      const url = editAccount ? `/api/accounts/${editAccount.id}` : '/api/accounts';
-      const method = editAccount ? 'PUT' : 'POST';
-      const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) });
-      const data = await res.json();
-      if (data.success) {
-        toast.success(editAccount ? '账户已更新' : '账户已创建');
-        setOpen(false); setEditAccount(null);
-        setForm({ name: '', type: 'bank', balance: 0, currency: 'CNY', color: '#3b82f6' });
-        refreshAll();
+      if (editAccount) {
+        updateAccount(editAccount.id, form);
       } else {
-        toast.error(data.error);
+        createAccount(form);
       }
-    } catch { toast.error('操作失败'); }
+      toast.success(editAccount ? '账户已更新' : '账户已创建');
+      setOpen(false); setEditAccount(null);
+      setForm({ name: '', type: 'bank', balance: 0, currency: 'CNY', color: '#3b82f6' });
+      refreshAll();
+    } catch (e: any) { toast.error(e?.message || '操作失败'); }
     finally { setSaving(false); }
   };
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = (id: number) => {
     if (!confirm('确定要删除这个账户吗？')) return;
-    const res = await fetch(`/api/accounts/${id}`, { method: 'DELETE' });
-    const data = await res.json();
-    if (data.success) { toast.success('账户已删除'); refreshAll(); }
-    else { toast.error(data.error); }
+    try {
+      deleteAccount(id);
+      toast.success('账户已删除'); refreshAll();
+    } catch (e: any) { toast.error(e?.message || '操作失败'); }
   };
 
   const openEdit = (a: Account) => {

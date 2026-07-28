@@ -55,7 +55,7 @@ export default function CategoriesPage() {
         setOpen(false); setEditCat(null); setForm(emptyForm);
         refreshAll();
       } else { toast.error(data.error); }
-    } catch { toast.error('操作失败'); }
+    } catch (e: any) { toast.error(e?.message || "操作失败"); }
     finally { setSaving(false); }
   };
 
