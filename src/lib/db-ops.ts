@@ -288,9 +288,23 @@ export function deleteFund(code: string) {
   run('DELETE FROM funds WHERE code=?', [code]);
   markDirty();
 }
-export function refreshFundNavs() {
-  // 这个需要网络，保留为 API 调用
-  return fetch('/api/funds/refresh').then(r => r.json());
+export async function refreshFundNavs() {
+  // 调服务端 API 拿净值，然后同步到客户端 DB
+  const r = await fetch('/api/funds/refresh');
+  const data = await r.json();
+  if (data.success) {
+    // 从服务端拉基金列表（含最新净值），同步到客户端 DB
+    const fundsRes = await fetch('/api/funds');
+    const fundsData = await fundsRes.json();
+    if (fundsData.success && fundsData.data.funds) {
+      for (const f of fundsData.data.funds) {
+        if (f.current_nav != null) {
+          updateFundNav(f.code, f.current_nav, f.nav_date);
+        }
+      }
+    }
+  }
+  return data;
 }
 export function searchFunds(keyword: string) {
   return fetch(`/api/funds/search?keyword=${encodeURIComponent(keyword)}`).then(r => r.json());
